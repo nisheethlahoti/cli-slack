@@ -32,18 +32,19 @@ def receive():
                 print(json)
                 print()
 
+
 def idle_loop():
     print("[Idling about]")
     while True:
         try:
             receive()
             time.sleep(1)
-        except Exception as e:
-            print("Disconnected: {}".format(e))
-            while not slack_client.rtm_connect():
-                print("Unable to connect")
-                time.sleep(1)
-            print("Slack client connected")
+        except Exception:
+            print("Disconnected")
+            if not slack_client.rtm_connect():
+                break
+            print("Reconnected")
+
 
 users = {}
 for user_data in slack_client.api_call("users.list")['members']:
