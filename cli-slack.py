@@ -1,8 +1,14 @@
+#!/usr/bin/python3 -i
+
+import requests
 import sys
 import time
 from slackclient import SlackClient
 
 slack_client = SlackClient(sys.argv[1])
+locations = {}
+files = []
+
 
 class PostLocation:
     def __init__(self, data, kind):
@@ -23,9 +29,14 @@ class PostLocation:
         idle_loop()
 
 
-ignore_types = {'hello', 'user_typing', 'desktop_notification', 'update_thread_state',
-                'im_marked', 'mpim_marked', 'group_marked', 'channel_marked'}
+ignore_types = {
+    'hello', 'user_typing', 'desktop_notification', 'update_thread_state', 'im_marked',
+    'mpim_marked', 'group_marked', 'channel_marked'
+}
+
+
 def receive():
+    global users
     for messages in iter(slack_client.rtm_read, []):
         for json in messages:
             if json['type'] == 'message' and 'user' in json:
@@ -33,10 +44,23 @@ def receive():
                 if uname != slack_client.server.username:
                     if json['channel'] in locations:
                         uname += " in " + locations[json['channel']].name
-                    print( (uname + ':\n' + json['text']).replace('\n', '\n| ') + '\n')
+                    print((uname + ':\n' + json['text']).replace('\n', '\n| ') + '\n')
+            elif json['type'] == 'file_shared' and 'file_id' in json:
+                lfile = slack_client.api_call('files.info', file=json['file_id'])['file']
+                print(f"File #{len(files)} uploaded: {lfile['name']}\
+                       \n  Size: {lfile['size']}\n  User: {lfile['user']}")
+                files.append(lfile)
             elif json['type'] not in ignore_types:
                 print(json)
                 print()
+
+
+def download(fnum, name=''):
+    finfo = files[fnum]
+    headers = {'Authorization': 'Bearer ' + slack_client.token}
+    with requests.get(finfo['url_private_download'], headers=headers) as fle:
+        with open(name or finfo['name'], 'wb') as outf:
+            outf.write(fle.content)
 
 
 def idle_loop():
@@ -58,11 +82,10 @@ def populate(kind, getter, invalidator):
         if not data[invalidator]:
             loc = PostLocation(data, kind)
             globals()[kind][loc.id] = loc
-            globals()[loc.name.replace('-','_')] = loc
+            globals()[loc.name.replace('-', '_')] = loc
     locations.update(globals()[kind])
 
 
-locations = {}
 populate('users', 'members', 'deleted')
 populate('groups', 'groups', 'is_archived')
 populate('channels', 'channels', 'is_archived')
