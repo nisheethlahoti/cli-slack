@@ -61,12 +61,6 @@ def download(fnum, name=''):
             outf.write(fle.content)
 
 
-def connect():
-    print('Establishing real-time messaging connection...')
-    slack.rtm_connect(auto_reconnect=True)
-    Thread(target=receive, daemon=True).start()
-
-
 def populate(api, getter, skip, first_name, second_name='', splitter=lambda _: True):
     elems = {x['id']: PostLocation(x) for x in slack.api_call(api)[getter] if not x[skip]}
     first = {k: v for k, v in elems.items() if splitter(v)}
@@ -85,9 +79,16 @@ def mpdm(*args):
     return groups[0]
 
 
-users, _ = populate('users.list', 'members', 'deleted', 'users')
-public_channels, _ = populate('channels.list', 'channels', 'is_archived', 'public channels')
-private_channels, mpdms = populate('groups.list', 'groups', 'is_archived', 'private channels',
-                                   'mpdms', lambda x: x.name[:5] != 'mpdm-')
-connect()
+try:
+    users, _ = populate('users.list', 'members', 'deleted', 'users')
+    public_channels, _ = populate('channels.list', 'channels', 'is_archived', 'public channels')
+    private_channels, mpdms = populate('groups.list', 'groups', 'is_archived', 'private channels',
+                                       'mpdms', lambda x: x.name[:5] != 'mpdm-')
+    print('Establishing real-time messaging connection...')
+    slack.rtm_connect(auto_reconnect=True)
+except requests.exceptions.ConnectionError:
+    print('Unable to connect')
+    sys.exit(1)
+
+Thread(target=receive, daemon=True).start()
 uid = slack.server.login_data['self']['id']
